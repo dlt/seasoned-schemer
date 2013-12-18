@@ -341,5 +341,61 @@ last-food
 (set-counter 0)
 (supercounter deep)
 
+(define rember1*C2
+  (lambda (a l)
+    (letrec
+        [(R (lambda (l)
+              (cond
+                [(null? l) '()]
+                [(atom? (car l))
+                 (if (eq? (car l) a)
+                     (cdr l)
+                     (consC (car l)
+                            (R (cdr l))))]
+                [else
+                 (let [(av (R (car l)))]
+                   (if (eq? (car l) av)
+                       (consC (car l)
+                              (R (cdr l)))
+                       (consC av (cdr l))))])))]
+      (R l))))
 
+(set-counter 0)
+(rember1*C2 'noodles '((food) more (food)))
+(counter)
+
+(define bons
+  (lambda (kar)
+    (let [(kdr '())]
+      (lambda (selector)
+        (selector (lambda (x) (set! kdr x))
+                  kar
+                  kdr)))))
+
+(define kons
+  (lambda (a d)
+    (let [(c (bons a))]
+      (set-kdr c d)
+      c)))
+
+(define set-kdr
+  (lambda (c x)
+    ((c (lambda (s a d) s)) x)))
+
+(define kar
+  (lambda (c)
+    (c (lambda (s a d) a))))
+
+(define kdr
+  (lambda (c)
+    (c (lambda (s a d) d))))
+
+(define lots
+  (lambda (m)
+    (if (zero? m)
+        '()
+        (kons 'egg
+              (lots (sub1 m))))))
+
+(kar (kdr (lots 20)))
 
