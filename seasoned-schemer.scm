@@ -254,10 +254,23 @@ last-food
                (A (cdr ns) (cdr rs))]))])
     (A Ns Rs)))
 
+(define counter (lambda() '()))
+(define set-counter (lambda(x) '()))
+(define consC
+  (let [(N 0)]
+    (set! counter (lambda () N))
+    (set! set-counter (lambda (x) (set! N x)))
+    (lambda (x y)
+      (set! N (add1 N))
+      (cons x y))))
+
+(consC 1 (consC 2 (consC 3 '())))
+(counter)
+
 (define (deep n)
   (cond
     [(zero? n) 'pizza]
-    [else (cons (deepM (sub1 n))
+    [else (consC (deep (sub1 n))
                 '())]))
 
 (define deepM
@@ -271,5 +284,62 @@ last-food
             result)))))
 
 (deepM 10) (deepM 15)
+
+(define length
+  (let [(h (lambda (l) 0))]
+    (set! h
+          (lambda (l)
+            (if (null? l)
+                0
+                (add1 (h (cdr l))))))
+    h))
+
+(length '(1 2 3 4 5 6 7 8 8 8 88 88 8 8 8 8 8 8 8 8))
+
+
+(define Y
+  (lambda (L)
+    (let [(h (lambda (l) '()))]
+      (set! h
+            (L (lambda (arg) (h arg))))
+      h)))
+
+(define lengthY
+  (Y (lambda (f)
+       (lambda (l)
+         (if (null? l)
+             0
+             (add1 (f (cdr l))))))))
+
+(lengthY '())
+
+(define depthY
+  (Y (lambda (depth*)
+       (lambda (s)
+         (cond
+           [(null? s) 1]
+           [(atom? (car s)) (depth* (cdr s))]
+           [else
+            (max
+             (add1 (depth* (car s)))
+             (depth* (cdr s)))])))))
+
+(depthY '(1 2 '(1 2 3)))
+
+(define supercounter
+  (lambda (f)
+    (letrec
+        [(S (lambda (n)
+              (if (zero? n)
+                  (f n)
+                  (let ()
+                    (f n)
+                    (S (sub1 n))))))]
+      (S 1000)
+      (counter))))
+
+(set-counter 0)
+(supercounter deep)
+
 
 
