@@ -3,7 +3,8 @@
 (define (atom? x)
    (ormap (lambda (p) (p x)) (list number? symbol? boolean? string?)))
 (define (member? a lat)
-  (if (null? lat) #f
+  (if (null? lat)
+      #f
       (or (eq? a (car lat))
           (member? a (cdr lat)))))
 (member? 4 '(2 3 4 5))
@@ -399,3 +400,366 @@ last-food
 
 (kar (kdr (lots 20)))
 
+(define add-at-end-too
+  (lambda (l)
+    (letrec
+        ((A (lambda (ls)
+              (cond
+                [(null? (kdr ls))
+                 (set-kdr ls (kons 'egg '()))]
+                [else (A (kdr ls))]))))
+      (A l)
+      l)))
+
+(define same?
+  (lambda (c1 c2)
+    (let ((t1 (kdr c1))
+          (t2 (kdr c2)))
+      (set-kdr c1 1)
+      (set-kdr c2 2)
+      (let ((v (= (kdr c1) (kdr c2))))
+        (set-kdr c1 t1)
+        (set-kdr c2 t2)
+        v))))
+
+(define dozen (lots 12))
+(define bakers-dozen (add-at-end-too dozen))
+(same? dozen bakers-dozen)
+
+(define toppings null)
+(define (deepB m)
+  (if (zero? m)
+      (let/cc jump
+        (set! toppings jump)
+        'pizza)
+      (cons (deepB (sub1 m)) '())))
+
+(deepB 10)
+(toppings 'mozzarela)
+
+
+(cons '() (toppings 'apple))
+(cons (toppings 'apple) (toppings 'apple))
+
+(define (deep&co m k)
+  (if (zero? m)
+      (k 'pizza)
+      (deep&co (sub1 m)
+               (lambda (x)
+                 (k (cons x '()))))))
+
+(deep&co 0 (lambda (x) x))
+
+(deep&co 1 (lambda (x) x))
+
+(deep&co 5 (lambda (x) x))
+
+(define (deep&coB m k)
+  (if (zero? m)
+      (begin
+        (set! toppings k)
+        (k 'pizza))
+      (deep&coB (sub1 m)
+                (lambda (x)
+                  (k (cons x '()))))))
+
+(define leave null)
+(define (walk l)
+  (cond
+    ((null? l) '())
+    ((atom? (car l)) (leave (car l)))
+    (else
+     (begin
+       (walk (car l))
+       (walk (cdr l))))))
+
+
+(define (start-it l)
+  (let/cc here
+    (set! leave here)
+    (walk l)))
+
+(define fill null)
+(define (waddle l)
+  (cond
+    [(null? l) '()]
+    [(atom? (car l))
+     (begin
+       (let/cc rest
+         (set! fill rest)
+         (leave (car l)))
+       (waddle (cdr l)))]
+    [else
+     (begin
+       (waddle (car l))
+       (waddle (cdr l)))]))
+
+(define (start-it2 l)
+  (let/cc here
+    (set! leave here)
+    (waddle l)))
+
+(define (get-first l)
+  (let/cc here
+    (set! leave here)
+    (waddle l)
+    (leave '())))
+
+(define (get-next x)
+  (let/cc here-again
+    (set! leave here-again)
+    (fill 'go)))
+
+(get-first '(donut))
+(get-next 'go)
+
+(get-first '(fish (chips)))
+(get-next 'go)
+(get-next 'go)
+
+(define (two-in-a-row*? l)
+  (let
+      [(fst (get-first l))]
+    (if (atom? fst)
+        (two-in-a-row-b*? fst)
+        #f)))
+
+(define (two-in-a-row-b*? a)
+  (let
+      [(n (get-next 'go))]
+    (if (atom? n)
+        (or (eq? n a)
+            (two-in-a-row-b*? n))
+        #f)))
+
+
+(define (lookup table name)
+  (table name))
+
+(define (extend name1 value table)
+  (lambda (name2)
+    (if (eq? name1 name2)
+        value
+        (table name2))))
+
+(define (define? e)
+  (cond
+    [(atom? e) #f]
+    [(atom? (car e)) (eq? (car e) 'define)]
+    [else #f]))
+
+(define (*define e)
+  (set! global-table
+        (extend (name-of e)
+                (box (the-meaning (right-side-of e)))
+                global-table)))
+
+(define (box it)
+  (lambda (sel)
+    (sel it (lambda (new) (set! it new)))))
+
+(define (setbox box new)
+  (box (lambda (it set) (set new))))
+
+
+(define (unbox box)
+  (box (lambda (it set) it)))
+
+(define (the-meaning e)
+  (meaning e lookup-in-global-table))
+
+(define (lookup-in-global-table name)
+  (lookup global-table name))
+
+(define (meaning e table)
+  ((expression-to-action e) e table))
+
+(define (*quote e table)
+  (text-of e))
+
+(define (*identifier e table)
+  (unbox (lookup table e)))
+
+(define (*set e table)
+  (setbox (lookup table (name-of e))
+          (meaning (right-side-of e) table)))
+
+(define (*lambda e table)
+  (lambda (args)
+    (beglis (body-of e)
+            (multi-extend (formals-of e)
+                          (box-all args)
+                          table))))
+(define (beglis es table)
+  (if (null? (cdr es))
+      (meaning (car es) table)
+      ((lambda (val) (beglis (cdr es) table)) (meaning (car es) table))))
+
+(define (box-all vals)
+  (if (null? vals)
+      '()
+      (cons (box (car vals))
+            (box-all (cdr vals)))))
+
+(define (multi-extend names values table)
+  (if (null? names)
+      table
+      (extend (car names)
+              (car values)
+              (multi-extend (cdr names)
+                            (cdr values)
+                            table))))
+(define (*application e table)
+  ((meaning (function-of e) table) (evlis (arguments-of e) table)))
+
+(define (evlis args table)
+  (if (null? args)
+      '()
+      ((lambda (val)
+         (cons val (evlis (cdr args) table)))
+       (meaning (car args) table))))
+
+(define (:car args-in-a-list)
+  (car (car args-in-a-list)))
+
+(define (a-prim p)
+  (lambda (args-in-a-list)
+    (p (car args-in-a-list))))
+
+(define (b-prim p)
+  (lambda (args-in-a-list)
+    (p (car args-in-a-list)
+       (car (cdr args-in-a-list)))))
+
+(define *const
+  (lambda (:cons :car :cdr :null? eq? atom?
+           :zero? :add1 :sub1 :number?)
+    (lambda (e table)
+      (cond
+        [(number? e) e]
+        [(eq? e #t) #t]
+        [(eq? e #f) #f]
+        [(eq? e 'cons) :cons]
+        [(eq? e 'car) :car]
+        [(eq? e 'cdr) :cdr]
+        
+        [(eq? e 'null?) :null]
+        [(eq? e 'eq?) :eq?]
+        [(eq? e 'atom?) :atom?]
+        [(eq? e 'zero?) :zero?]
+        [(eq? e 'add1) :add1]
+        [(eq? e 'sub1) :sub1]
+        [(eq? e 'number?) :number?])))
+  (b-prim cons)
+  (a-prim car)
+  (a-prim cdr)
+  (a-prim null?)
+  (a-prim eq?)
+  (a-prim atom?)
+  (a-prim zero?)
+  (a-prim add1)
+  (a-prim sub1)
+  (a-prim number?))
+
+(define (*cond e table)
+  (evcon (cond-lines-of e) table))
+
+(define (evcon lines table)
+  (cond
+    [(else? (question-of (car lines)))
+     (meaning (answer-of (car lines)) table)]
+    [(meaning (question-of (car lines)) table)
+     (meaning (answer-of (car lines) table))]
+    [else (evcon (cdr lines) table)]))
+
+(define (*letcc e table)
+  (let/cc skip
+    (beglis (ccbody-of e)
+            (extend (name-of e)
+                    (box (a-prim skip))
+                    table))))
+
+(define abort null)
+
+(define (value e)
+  (let/cc the-end
+    (set! abort the-end)
+    (if (define? e)
+        (*define e)
+        (the-meaning e))))
+
+(define (expression-to-action e)
+  (if (atom? e)
+      (atom-to-action e)
+      (list-to-action e)))
+
+(define (atom-to-action e)
+  (cond
+    [(number? e) *const]
+    [(eq? e #t) *const]
+    [(eq? e #f) *const]
+    [(eq? e 'cons) *const]
+    [(eq? e 'car) *const]
+    [(eq? e 'cdr) *const]
+    [(eq? e 'null?) *const]
+    [(eq? e 'eq?) *const]
+    [(eq? e 'atom?) *const]
+    [(eq? e 'zero?) *const]
+    [(eq? e 'add1) *const]
+    [(eq? e 'sub1) *const]
+    [(eq? e 'number?) *const]
+    [else *identifier]))
+
+(define (the-empty-table name)
+  (abort (cons 'no-answer
+               (cons name '()))))
+
+(define (list-to-action e)
+  (if (atom? (car e)
+             (cond
+               [(eq? (car e) 'quote) *quote]
+               [(eq? (car e) 'lambda) *lambda]
+               [(eq? (car e) 'letcc) *letcc]
+               [(eq? (car e) 'set!) *set]
+               [(eq? (car e) 'cond) *cond]
+               [else *application])
+             *application)))
+
+(define (text-of x)
+  (cadr x))
+
+(define (formals-of x)
+  (cadr x))
+
+(define (body-of x)
+  (cddr x))
+
+(define (ccbody-of x)
+  (cddr x))
+
+(define (name-of x)
+  (cadr x))
+
+(define (right-side-of x)
+  (if (null? (cddr x))
+      0
+      (caddr x)))
+
+(define (cond-lines-of x)
+  (cdr x))
+
+(define (else? x)
+  (and (atom? x)
+       (eq? x 'else)))
+
+(define (question-of x)
+  (car x))
+
+(define (answer-of x)
+  (cadr x))
+
+(define (function-of x)
+  (car x))
+
+(define (arguments-of x)
+  (cdr x))
