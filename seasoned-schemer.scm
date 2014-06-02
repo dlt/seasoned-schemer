@@ -548,6 +548,12 @@ last-food
     [(atom? (car e)) (eq? (car e) 'define)]
     [else #f]))
 
+(define (the-empty-table name)
+  (abort (cons 'no-answer
+               (cons name '()))))
+
+(define global-table '())
+
 (define (*define e)
   (set! global-table
         (extend (name-of e)
@@ -632,7 +638,7 @@ last-food
        (car (cdr args-in-a-list)))))
 
 (define *const
-  (lambda (:cons :car :cdr :null? eq? atom?
+  ((lambda (:cons :car :cdr :null? :eq? :atom?
            :zero? :add1 :sub1 :number?)
     (lambda (e table)
       (cond
@@ -643,7 +649,7 @@ last-food
         [(eq? e 'car) :car]
         [(eq? e 'cdr) :cdr]
         
-        [(eq? e 'null?) :null]
+        [(eq? e 'null?) :null?]
         [(eq? e 'eq?) :eq?]
         [(eq? e 'atom?) :atom?]
         [(eq? e 'zero?) :zero?]
@@ -659,7 +665,7 @@ last-food
   (a-prim zero?)
   (a-prim add1)
   (a-prim sub1)
-  (a-prim number?))
+  (a-prim number?)))
 
 (define (*cond e table)
   (evcon (cond-lines-of e) table))
@@ -710,20 +716,16 @@ last-food
     [(eq? e 'number?) *const]
     [else *identifier]))
 
-(define (the-empty-table name)
-  (abort (cons 'no-answer
-               (cons name '()))))
-
 (define (list-to-action e)
-  (if (atom? (car e)
-             (cond
-               [(eq? (car e) 'quote) *quote]
-               [(eq? (car e) 'lambda) *lambda]
-               [(eq? (car e) 'letcc) *letcc]
-               [(eq? (car e) 'set!) *set]
-               [(eq? (car e) 'cond) *cond]
-               [else *application])
-             *application)))
+  (if (atom? (car e))
+      (cond
+        [(eq? (car e) 'quote) *quote]
+        [(eq? (car e) 'lambda) *lambda]
+        [(eq? (car e) 'letcc) *letcc]
+        [(eq? (car e) 'set!) *set]
+        [(eq? (car e) 'cond) *cond]
+        [else *application])
+      *application))
 
 (define (text-of x)
   (cadr x))
